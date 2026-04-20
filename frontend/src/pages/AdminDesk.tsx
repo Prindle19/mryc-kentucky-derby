@@ -1,4 +1,4 @@
-import { fetchBoard, buyBoxes, quickPick, draw, resetBoard, setResults, toggleScratch, type BoardState, type Box } from '../api/api';
+import { fetchBoard, buyBoxes, quickPick, draw, resetBoard, setResults, toggleScratch, type BoardState } from '../api/api';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +11,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 export default function AdminDesk() {
   const navigate = useNavigate();
   const [state, setState] = useState<BoardState | null>(null);
-  const [pending, setPending] = useState<Box[]>([]);
+  const [pending, setPending] = useState<{x: number, y: number}[]>([]);
   const [player, setPlayer] = useState('');
   const [qpQty, setQpQty] = useState(1);
   
@@ -268,7 +268,7 @@ export default function AdminDesk() {
                 </div>
                 <button 
                   onClick={commitManual}
-                  disabled={pending.length === 0 || !player || state.status === 'DRAWN'}
+                  disabled={pending.length === 0 || !player}
                   className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg rounded-lg shadow disabled:opacity-50"
                 >
                   Commit Selection
@@ -296,7 +296,7 @@ export default function AdminDesk() {
                 </div>
                 <button 
                   onClick={commitQuickPick}
-                  disabled={!player || state.status === 'DRAWN'}
+                  disabled={!player}
                   className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold text-lg rounded-lg shadow disabled:opacity-50"
                 >
                   Buy Quick Picks

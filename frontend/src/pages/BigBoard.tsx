@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Confetti from 'react-confetti';
 import { subscribeToBoard, type BoardState } from '../api/api';
 import { clsx } from 'clsx';
@@ -156,7 +156,7 @@ export default function BigBoard() {
                           className={cn(
                             "flex-1 flex items-center justify-center font-black text-sm lg:text-lg rounded-sm transition-all",
                             horseNum ? "shadow-md" : "drop-shadow-sm",
-                            isScratched && "opacity-30 grayscale line-through"
+                            !!isScratched && "opacity-30 grayscale line-through"
                           )}
                           style={{
                             backgroundColor: style.bg,
@@ -186,7 +186,7 @@ export default function BigBoard() {
                       className={cn(
                         "flex-1 flex items-center font-black text-sm lg:text-lg rounded-sm transition-all",
                         horseNum ? "justify-center shadow-md" : "justify-end pr-1 drop-shadow-sm",
-                        isScratched && "opacity-30 grayscale line-through"
+                        !!isScratched && "opacity-30 grayscale line-through"
                       )}
                       style={{
                         backgroundColor: style.bg,
@@ -289,7 +289,7 @@ export default function BigBoard() {
                                isDimmed && !isExactaMatch && !isScratched && "opacity-20 grayscale scale-95"
                              )}
                            >
-                             {isDiagonal ? '' : (isSold ? box.owner.substring(0,10) : '')}
+                             {isDiagonal ? '' : (isSold ? box.owner?.substring(0,10) : '')}
                            </div>
                          );
                        })}

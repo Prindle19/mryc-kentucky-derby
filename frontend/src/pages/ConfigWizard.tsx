@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchBoard, updateSettings, toggleActiveHorse, type BoardState } from '../api/api';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
