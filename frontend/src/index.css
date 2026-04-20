@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: #0f172a; /* slate-900 */
+  color: #f8fafc; /* slate-50 */
+  font-family: var(--font-sans);
+}
+
+/* Custom styles to hide scrollbars for cleaner HDTV view if needed */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
