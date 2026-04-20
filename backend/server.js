@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const docRef = db.collection('pools').doc('kentucky_derby_2026');
 
 // In-memory cache synced by onSnapshot
