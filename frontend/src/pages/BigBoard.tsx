@@ -8,6 +8,36 @@ function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
+const getSaddleClothStyle = (horseNumber: number) => {
+  switch (horseNumber) {
+    case 1: return { bg: '#E53935', text: '#FFFFFF' };
+    case 2: return { bg: '#FFFFFF', text: '#000000', border: '#E0E0E0' };
+    case 3: return { bg: '#1E3A8A', text: '#FFFFFF' };
+    case 4: return { bg: '#FACC15', text: '#000000' };
+    case 5: return { bg: '#16A34A', text: '#FFFFFF' };
+    case 6: return { bg: '#000000', text: '#FACC15' };
+    case 7: return { bg: '#F97316', text: '#000000' };
+    case 8: return { bg: '#F472B6', text: '#000000' };
+    case 9: return { bg: '#2DD4BF', text: '#000000' };
+    case 10: return { bg: '#7E22CE', text: '#FFFFFF' };
+    case 11: return { bg: '#9CA3AF', text: '#DC2626' };
+    case 12: return { bg: '#A3E635', text: '#000000' };
+    case 13: return { bg: '#452B11', text: '#FFFFFF' };
+    case 14: return { bg: '#7F1D1D', text: '#FACC15' };
+    case 15: return { bg: '#E5E5CB', text: '#000000' };
+    case 16: return { bg: '#93C5FD', text: '#EA580C' };
+    case 17: return { bg: '#172554', text: '#FFFFFF' };
+    case 18: return { bg: '#14532D', text: '#FACC15' };
+    case 19: return { bg: '#2563EB', text: '#DC2626' };
+    case 20: return { bg: '#D946EF', text: '#FACC15' };
+    case 21: return { bg: '#D8B4E2', text: '#1E3A8A' };
+    case 22: return { bg: '#0284C7', text: '#FFFFFF' };
+    case 23: return { bg: '#BEE3DB', text: '#064E3B' };
+    case 24: return { bg: '#4B5320', text: '#FFFFFF' };
+    default: return { bg: '#333333', text: '#FFFFFF' };
+  }
+};
+
 export default function BigBoard() {
   const [state, setState] = useState<BoardState | null>(null);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -25,7 +55,15 @@ export default function BigBoard() {
 
   if (!state) return <div className="h-screen w-screen bg-slate-950 flex items-center justify-center text-white text-3xl">Loading Board...</div>;
 
-  const totalSold = state.boxes.filter(b => b.owner && b.x !== b.y).length;
+  const isBoxScratched = (x: number, y: number) => {
+    if (!state.horses) return false;
+    const horseX = state.horses[x];
+    const horseY = state.horses[y];
+    return !!state.scratchedHorses?.includes(horseX) || !!state.scratchedHorses?.includes(horseY);
+  };
+
+  const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && !isBoxScratched(b.x, b.y));
+  const totalSold = validSoldBoxes.length;
   const totalBoxes = 380;
   const pot = totalSold * (state.pricePerBox || 3);
   
@@ -105,11 +143,28 @@ export default function BigBoard() {
                   <div className="w-8 pr-1" />
                   {/* Actual X labels */}
                   <div className="flex-1 flex gap-[2px] px-[2px]">
-                    {Array.from({length: 20}).map((_, i) => (
-                      <div key={i} className="flex-1 flex items-center justify-center font-black text-white/80 text-sm lg:text-lg drop-shadow-sm">
-                         {state.horses ? state.horses[i] : '?'}
-                      </div>
-                    ))}
+                    {Array.from({length: 20}).map((_, i) => {
+                      const horseNum = state.horses ? state.horses[i] : null;
+                      const style = horseNum ? getSaddleClothStyle(horseNum) : { bg: 'transparent', text: 'rgba(255,255,255,0.8)' };
+                      const isScratched = horseNum && state.scratchedHorses?.includes(horseNum);
+                      return (
+                        <div 
+                          key={i} 
+                          className={cn(
+                            "flex-1 flex items-center justify-center font-black text-sm lg:text-lg rounded-sm transition-all",
+                            horseNum ? "shadow-md" : "drop-shadow-sm",
+                            isScratched && "opacity-30 grayscale line-through"
+                          )}
+                          style={{
+                            backgroundColor: style.bg,
+                            color: style.text,
+                            border: style.border ? `1px solid ${style.border}` : 'none'
+                          }}
+                        >
+                           {horseNum || '?'}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
             </div>
@@ -118,11 +173,28 @@ export default function BigBoard() {
             <div className="flex-1 flex">
               {/* Y Axis Labels */}
               <div className="w-8 flex flex-col gap-[2px] py-[2px] pr-1">
-                {Array.from({length: 20}).map((_, i) => (
-                  <div key={i} className="flex-1 flex items-center justify-end font-black text-white/80 text-sm lg:text-lg drop-shadow-sm">
-                     {state.horses ? state.horses[i] : '?'}
-                  </div>
-                ))}
+                {Array.from({length: 20}).map((_, i) => {
+                  const horseNum = state.horses ? state.horses[i] : null;
+                  const style = horseNum ? getSaddleClothStyle(horseNum) : { bg: 'transparent', text: 'rgba(255,255,255,0.8)' };
+                  const isScratched = horseNum && state.scratchedHorses?.includes(horseNum);
+                  return (
+                    <div 
+                      key={i} 
+                      className={cn(
+                        "flex-1 flex items-center font-black text-sm lg:text-lg rounded-sm transition-all",
+                        horseNum ? "justify-center shadow-md" : "justify-end pr-1 drop-shadow-sm",
+                        isScratched && "opacity-30 grayscale line-through"
+                      )}
+                      style={{
+                        backgroundColor: style.bg,
+                        color: style.text,
+                        border: style.border ? `1px solid ${style.border}` : 'none'
+                      }}
+                    >
+                       {horseNum || '?'}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* 20x20 Grid */}
@@ -198,6 +270,7 @@ export default function BigBoard() {
                          
                          // If any result is revealed, dim boxes that aren't in the winning column
                          const isDimmed = state.winHorse != null && !isWinColumn && !isDiagonal;
+                         const isScratched = isBoxScratched(x, y);
 
                          return (
                            <div 
@@ -205,11 +278,12 @@ export default function BigBoard() {
                              className={cn(
                                "flex-1 flex items-center justify-center text-[0.65rem] lg:text-xs font-bold truncate px-1 rounded-sm transition-all duration-700",
                                isDiagonal ? "bg-[repeating-linear-gradient(45deg,rgba(0,0,0,0.2),rgba(0,0,0,0.2)_4px,rgba(255,255,255,0.02)_4px,rgba(255,255,255,0.02)_8px)] bg-[#0D1A2E] border border-[#0D1A2E]" :
+                               isScratched ? "bg-slate-800 text-white/30 line-through opacity-60 border border-slate-700" :
                                isExactaMatch ? "bg-yellow-400 text-black shadow-[0_0_30px_rgba(250,204,21,1)] scale-125 z-40 border-2 border-white text-sm lg:text-base" :
                                isWinColumn ? "bg-[#4ADE80] text-[#064e3b] shadow-[0_0_15px_rgba(74,222,128,0.8)] z-20 border border-emerald-300 scale-105" :
                                isSold ? "bg-[#88D4AB] text-[#0A1F3F] border border-[#65C292]" :
                                "bg-[#224476] border border-[#2A528A] text-white/50",
-                               isDimmed && !isExactaMatch && "opacity-20 grayscale scale-95"
+                               isDimmed && !isExactaMatch && !isScratched && "opacity-20 grayscale scale-95"
                              )}
                            >
                              {isDiagonal ? '' : (isSold ? box.owner.substring(0,10) : '')}

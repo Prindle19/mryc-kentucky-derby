@@ -1,4 +1,4 @@
-import { fetchBoard, buyBoxes, quickPick, draw, resetBoard, setResults, type BoardState, type Box } from '../api/api';
+import { fetchBoard, buyBoxes, quickPick, draw, resetBoard, setResults, toggleScratch, type BoardState, type Box } from '../api/api';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useNavigate } from 'react-router-dom';
@@ -83,12 +83,9 @@ export default function AdminDesk() {
   };
 
   const doReset = async () => {
-    if (prompt('Type "NUCLEAR" to wipe the board completely') !== 'NUCLEAR') return;
-    try {
+    if (prompt('Type BAFFERT to reset all data') === 'BAFFERT') {
       await resetBoard();
       loadBoard();
-    } catch (e: any) {
-      alert(e.message);
     }
   };
 
@@ -217,6 +214,30 @@ export default function AdminDesk() {
                   Clear Results (Mistake)
                 </button>
               )}
+
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h3 className="font-bold text-sm text-slate-500 uppercase tracking-widest mb-3">Scratched Horses</h3>
+                <p className="text-xs text-slate-400 mb-3">Select horses that scratched past the deadline to automatically issue refunds.</p>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({length: 24}).map((_, i) => {
+                     const horseNum = i + 1;
+                     const isScratched = state.scratchedHorses && state.scratchedHorses.includes(horseNum);
+                     return (
+                       <button 
+                         key={horseNum}
+                         onClick={() => toggleScratch(horseNum, !isScratched)}
+                         className={cn(
+                           "w-8 h-8 rounded text-xs font-bold border transition-colors",
+                           isScratched ? "bg-red-600 text-white border-red-700 shadow-inner" : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200"
+                         )}
+                       >
+                         {horseNum}
+                       </button>
+                     );
+                  })}
+                </div>
+              </div>
+
             </div>
           ) : (
             <>
@@ -374,7 +395,112 @@ export default function AdminDesk() {
                );
              })}
            </div>
-        </div>
+         </div>
+
+         {/* Third Col: Financial Dashboard */}
+         {state.status === 'DRAWN' && (
+           <div className="w-80 bg-[#1B365D] rounded-xl shadow-xl border border-[#0B1D3A] p-6 flex flex-col overflow-y-auto text-white">
+             <h2 className="text-xl font-black uppercase tracking-wider mb-6 flex items-center gap-2 text-emerald-400">
+               <span>💰</span> Financials
+             </h2>
+
+             {(() => {
+                const refundsOwed: Record<string, number> = {};
+                let totalRefunds = 0;
+                const payoutsOwed: Record<string, number> = {};
+                let totalPayouts = 0;
+
+                if (state.horses) {
+                  state.boxes.forEach(b => {
+                    if (!b.owner || b.x === b.y) return;
+                    const horseX = state.horses![b.x];
+                    const horseY = state.horses![b.y];
+                    if (state.scratchedHorses?.includes(horseX) || state.scratchedHorses?.includes(horseY)) {
+                       refundsOwed[b.owner] = (refundsOwed[b.owner] || 0) + state.pricePerBox;
+                       totalRefunds += state.pricePerBox;
+                    }
+                  });
+                }
+
+                if (state.winHorse) {
+                   const isBoxScratched = (x: number, y: number) => {
+                     if (!state.horses) return false;
+                     return !!state.scratchedHorses?.includes(state.horses[x]) || !!state.scratchedHorses?.includes(state.horses[y]);
+                   };
+                   
+                   const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && !isBoxScratched(b.x, b.y));
+                   const pot = validSoldBoxes.length * (state.pricePerBox || 3);
+                   const tipAmount = Math.floor(pot * ((state.tipPercentage || 0) / 100));
+                   const prizePool = pot - tipAmount;
+                   const columnPrizeEach = Math.floor(((prizePool * ((100 - (state.grandPrizePercentage || 50)) / 100)) / 18) / 5) * 5;
+                   const grandPrize = prizePool - (columnPrizeEach * 18);
+
+                   const winX = state.horses?.indexOf(state.winHorse);
+                   const showY = state.showHorse ? state.horses?.indexOf(state.showHorse) : -1;
+
+                   state.boxes.forEach(b => {
+                     if (!b.owner || b.x === b.y || isBoxScratched(b.x, b.y)) return;
+                     if (b.x === winX) {
+                       if (state.showHorse && b.y === showY) {
+                          payoutsOwed[b.owner] = (payoutsOwed[b.owner] || 0) + grandPrize;
+                          totalPayouts += grandPrize;
+                       } else {
+                          payoutsOwed[b.owner] = (payoutsOwed[b.owner] || 0) + columnPrizeEach;
+                          totalPayouts += columnPrizeEach;
+                       }
+                     }
+                   });
+                }
+
+                const refundEntries = Object.entries(refundsOwed).sort((a,b) => b[1] - a[1]);
+                const payoutEntries = Object.entries(payoutsOwed).sort((a,b) => b[1] - a[1]);
+
+                return (
+                  <div className="flex flex-col gap-8">
+                    {/* Refunds Section */}
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 border-b border-white/10 pb-2">
+                        Refunds Owed {totalRefunds > 0 && <span className="text-red-400 float-right">-${totalRefunds}</span>}
+                      </h3>
+                      {refundEntries.length === 0 ? (
+                        <p className="text-white/40 text-sm italic">No refunds to process.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {refundEntries.map(([owner, amount]) => (
+                            <div key={owner} className="flex justify-between items-center bg-white/5 p-2 rounded border border-red-500/30">
+                              <span className="font-semibold text-white truncate max-w-[150px]">{owner}</span>
+                              <span className="font-bold text-red-400">-${amount}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Payouts Section */}
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 border-b border-white/10 pb-2">
+                        Payout Schedule {totalPayouts > 0 && <span className="text-emerald-400 float-right">${totalPayouts}</span>}
+                      </h3>
+                      {!state.winHorse ? (
+                        <p className="text-white/40 text-sm italic">Results not yet drawn.</p>
+                      ) : payoutEntries.length === 0 ? (
+                        <p className="text-white/40 text-sm italic">No winning boxes sold.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {payoutEntries.map(([owner, amount]) => (
+                            <div key={owner} className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/30 shadow-sm">
+                              <span className="font-bold text-emerald-100 truncate max-w-[150px]">{owner}</span>
+                              <span className="font-black text-emerald-400 text-lg">${amount}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+             })()}
+           </div>
+         )}
 
       </main>
     </div>

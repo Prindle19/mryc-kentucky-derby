@@ -33,6 +33,7 @@ function getBoardState() {
     pricePerBox: meta.price_per_box ?? 3,
     tipPercentage: meta.tip_percentage ?? 0,
     grandPrizePercentage: meta.grand_prize_percentage ?? 50,
+    scratchedHorses: meta.scratched_horses ? JSON.parse(meta.scratched_horses) : [],
     boxes: boxes
   };
 }
@@ -164,9 +165,32 @@ app.post('/settings', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/scratch', (req, res) => {
+  const { horseNumber, isScratched } = req.body;
+  
+  // Can only scratch valid horses 1-24
+  if (horseNumber < 1 || horseNumber > 24) {
+    return res.status(400).json({ error: 'Invalid horse number' });
+  }
+
+  const meta = db.prepare('SELECT scratched_horses FROM meta WHERE id = 1').get();
+  let scratched = meta.scratched_horses ? JSON.parse(meta.scratched_horses) : [];
+
+  if (isScratched && !scratched.includes(horseNumber)) {
+    scratched.push(horseNumber);
+  } else if (!isScratched) {
+    scratched = scratched.filter(h => h !== horseNumber);
+  }
+
+  db.prepare("UPDATE meta SET scratched_horses = ? WHERE id = 1").run(JSON.stringify(scratched));
+  
+  notifyClients();
+  res.json({ success: true, scratchedHorses: scratched });
+});
+
 app.post('/reset', (req, res) => {
   db.transaction(() => {
-    db.prepare("UPDATE meta SET status = 'OPEN', horses = NULL, win_horse = NULL, show_horse = NULL WHERE id = 1").run();
+    db.prepare("UPDATE meta SET status = 'OPEN', horses = NULL, win_horse = NULL, show_horse = NULL, scratched_horses = '[]' WHERE id = 1").run();
     db.prepare("UPDATE boxes SET owner = NULL").run();
   })();
   notifyClients();

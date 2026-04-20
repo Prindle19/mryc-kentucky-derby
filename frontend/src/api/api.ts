@@ -14,6 +14,7 @@ export interface BoardState {
   pricePerBox: number;
   tipPercentage: number;
   grandPrizePercentage: number;
+  scratchedHorses: number[];
   boxes: Box[];
 }
 
@@ -87,6 +88,17 @@ export const updateSettings = async (pricePerBox?: number, tipPercentage?: numbe
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to update settings');
+  return data;
+};
+
+export const toggleScratch = async (horseNumber: number, isScratched: boolean) => {
+  const res = await fetch(`${API_BASE}/scratch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ horseNumber, isScratched })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to toggle scratch');
   return data;
 };
 
