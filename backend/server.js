@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const db = require('./db');
 
@@ -221,6 +222,13 @@ app.post('/reset', (req, res) => {
   })();
   notifyClients();
   res.json({ success: true });
+});
+
+// Serve Frontend in Production
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
 app.listen(PORT, () => {
