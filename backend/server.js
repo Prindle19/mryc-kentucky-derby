@@ -1,43 +1,55 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const db = require('./db');
+const { db } = require('./firebase');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const PORT = 3000;
+const docRef = db.collection('pools').doc('kentucky_derby_2026');
 
-// SSE Clients
+// In-memory cache synced by onSnapshot
+let cachedState = null;
 let clients = [];
 
+// Ensure document exists
+async function initDB() {
+  const doc = await docRef.get();
+  if (!doc.exists) {
+    await docRef.set({
+      status: 'OPEN',
+      horses: null,
+      winHorse: null,
+      showHorse: null,
+      pricePerBox: 3,
+      tipPercentage: 0,
+      grandPrizePercentage: 50,
+      scratchedHorses: [],
+      activeHorses: Array.from({length: 20}, (_, i) => i + 1),
+      boxes: []
+    });
+  }
+}
+initDB();
+
+docRef.onSnapshot(doc => {
+  if (doc.exists) {
+    cachedState = doc.data();
+    notifyClients();
+  }
+});
+
 function notifyClients() {
-  const state = getBoardState();
+  if (!cachedState) return;
   clients.forEach(c => {
     try {
-      c.res.write(`data: ${JSON.stringify(state)}\n\n`);
+      c.res.write(`data: ${JSON.stringify(cachedState)}\n\n`);
     } catch (e) {
-      // client probably disconnected
+      // client disconnected
     }
   });
-}
-
-function getBoardState() {
-  const meta = db.prepare('SELECT * FROM meta WHERE id = 1').get();
-  const boxes = db.prepare('SELECT * FROM boxes').all();
-  return {
-    status: meta.status,
-    horses: meta.horses ? JSON.parse(meta.horses) : null,
-    winHorse: meta.win_horse,
-    showHorse: meta.show_horse,
-    pricePerBox: meta.price_per_box ?? 3,
-    tipPercentage: meta.tip_percentage ?? 0,
-    grandPrizePercentage: meta.grand_prize_percentage ?? 50,
-    scratchedHorses: meta.scratched_horses ? JSON.parse(meta.scratched_horses) : [],
-    activeHorses: meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1),
-    boxes: boxes
-  };
 }
 
 // SSE Endpoint
@@ -47,7 +59,9 @@ app.get('/events', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   clients.push({ req, res });
-  res.write(`data: ${JSON.stringify(getBoardState())}\n\n`);
+  if (cachedState) {
+    res.write(`data: ${JSON.stringify(cachedState)}\n\n`);
+  }
 
   req.on('close', () => {
     clients = clients.filter(c => c.req !== req);
@@ -55,179 +69,220 @@ app.get('/events', (req, res) => {
 });
 
 app.get('/board', (req, res) => {
-  res.json(getBoardState());
+  if (!cachedState) return res.status(503).json({ error: 'Starting up' });
+  res.json(cachedState);
 });
 
-app.post('/buy', (req, res) => {
+app.post('/buy', async (req, res) => {
   const { selections, owner } = req.body;
   if (!owner || !Array.isArray(selections) || selections.length === 0) {
     return res.status(400).json({ error: 'Invalid data' });
   }
 
-  const meta = db.prepare('SELECT status FROM meta WHERE id = 1').get();
-  if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Board is locked' });
+  try {
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      if (data.status !== 'OPEN') throw new Error('Board is locked');
 
-  // verify boxes are available
-  const getBox = db.prepare('SELECT owner FROM boxes WHERE x = ? AND y = ?');
-  for (let sel of selections) {
-    if (sel.x === sel.y) return res.status(400).json({ error: 'Cannot select diagonal box' });
-    const box = getBox.get(sel.x, sel.y);
-    if (!box) return res.status(400).json({ error: 'Invalid box coordinates' });
-    if (box.owner) return res.status(400).json({ error: 'Box already taken' });
+      const boxes = data.boxes || [];
+      
+      for (let sel of selections) {
+        if (sel.x === sel.y) throw new Error('Cannot select diagonal box');
+        if (sel.x < 0 || sel.y < 0) throw new Error('Invalid box coordinates');
+        if (boxes.some(b => b.x === sel.x && b.y === sel.y)) {
+          throw new Error('Box already taken');
+        }
+      }
+
+      // Add selections
+      const newBoxes = [...boxes];
+      for (let sel of selections) {
+        newBoxes.push({ x: sel.x, y: sel.y, owner });
+      }
+
+      t.update(docRef, { boxes: newBoxes });
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  const update = db.prepare('UPDATE boxes SET owner = ? WHERE x = ? AND y = ? AND x != y AND owner IS NULL');
-  
-  db.transaction(() => {
-    for (let sel of selections) {
-      update.run(owner, sel.x, sel.y);
-    }
-  })();
-
-  notifyClients();
-  res.json({ success: true });
 });
 
-app.post('/quick-pick', (req, res) => {
+app.post('/quick-pick', async (req, res) => {
   const { quantity, owner } = req.body;
   if (!owner || quantity <= 0) return res.status(400).json({ error: 'Invalid data' });
 
-  const meta = db.prepare('SELECT status, active_horses FROM meta WHERE id = 1').get();
-  if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Board is locked' });
+  try {
+    const selections = await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      if (data.status !== 'OPEN') throw new Error('Board is locked');
 
-  const activeHorses = meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1);
-  const gridSize = activeHorses.length;
+      const gridSize = data.activeHorses ? data.activeHorses.length : 20;
+      const boxes = data.boxes || [];
+      
+      // Find available boxes
+      const available = [];
+      for (let x = 0; x < gridSize; x++) {
+        for (let y = 0; y < gridSize; y++) {
+          if (x !== y && !boxes.some(b => b.x === x && b.y === y)) {
+            available.push({x, y});
+          }
+        }
+      }
 
-  const available = db.prepare('SELECT x, y FROM boxes WHERE owner IS NULL AND x != y AND x < ? AND y < ?').all(gridSize, gridSize);
-  if (available.length < quantity) return res.status(400).json({ error: 'Not enough empty boxes' });
+      if (available.length < quantity) throw new Error('Not enough empty boxes');
 
-  // Shuffle available
-  for (let i = available.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [available[i], available[j]] = [available[j], available[i]];
+      // Shuffle available
+      for (let i = available.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [available[i], available[j]] = [available[j], available[i]];
+      }
+
+      const picked = available.slice(0, quantity);
+      const newBoxes = [...boxes];
+      for (let sel of picked) {
+        newBoxes.push({ x: sel.x, y: sel.y, owner });
+      }
+
+      t.update(docRef, { boxes: newBoxes });
+      return picked;
+    });
+    res.json({ success: true, selections });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  const selections = available.slice(0, quantity);
-  const update = db.prepare('UPDATE boxes SET owner = ? WHERE x = ? AND y = ?');
-  
-  db.transaction(() => {
-    for (let sel of selections) {
-      update.run(owner, sel.x, sel.y);
-    }
-  })();
-
-  notifyClients();
-  res.json({ success: true, selections });
 });
 
-app.post('/draw', (req, res) => {
-  const meta = db.prepare('SELECT status, active_horses FROM meta WHERE id = 1').get();
-  if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Already drawn' });
+app.post('/draw', async (req, res) => {
+  try {
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      if (data.status !== 'OPEN') throw new Error('Already drawn');
 
-  let horses = meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1);
-  // Shuffle horses
-  for (let i = horses.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [horses[i], horses[j]] = [horses[j], horses[i]];
+      let horses = data.activeHorses ? [...data.activeHorses] : Array.from({length: 20}, (_, i) => i + 1);
+      for (let i = horses.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [horses[i], horses[j]] = [horses[j], horses[i]];
+      }
+
+      t.update(docRef, {
+        status: 'DRAWN',
+        horses: horses,
+        winHorse: null,
+        showHorse: null
+      });
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  db.prepare("UPDATE meta SET status = 'DRAWN', horses = ?, win_horse = NULL, show_horse = NULL WHERE id = 1").run(JSON.stringify(horses));
-  
-  notifyClients();
-  res.json({ success: true });
 });
 
-app.post('/results', (req, res) => {
+app.post('/results', async (req, res) => {
   const { winHorse, showHorse } = req.body;
-  const meta = db.prepare('SELECT status FROM meta WHERE id = 1').get();
-  if (meta.status !== 'DRAWN') return res.status(400).json({ error: 'Board not drawn yet' });
-
-  if (winHorse !== undefined) {
-    db.prepare("UPDATE meta SET win_horse = ? WHERE id = 1").run(winHorse);
-  }
-  if (showHorse !== undefined) {
-    db.prepare("UPDATE meta SET show_horse = ? WHERE id = 1").run(showHorse);
-  }
   
-  notifyClients();
-  res.json({ success: true });
+  try {
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      if (data.status !== 'DRAWN') throw new Error('Board not drawn yet');
+
+      const updates = {};
+      if (winHorse !== undefined) updates.winHorse = winHorse;
+      if (showHorse !== undefined) updates.showHorse = showHorse;
+      
+      t.update(docRef, updates);
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
-app.post('/settings', (req, res) => {
+app.post('/settings', async (req, res) => {
   const { pricePerBox, tipPercentage, grandPrizePercentage } = req.body;
+  const updates = {};
+  if (pricePerBox !== undefined) updates.pricePerBox = pricePerBox;
+  if (tipPercentage !== undefined) updates.tipPercentage = tipPercentage;
+  if (grandPrizePercentage !== undefined) updates.grandPrizePercentage = grandPrizePercentage;
   
-  if (pricePerBox !== undefined) {
-    db.prepare("UPDATE meta SET price_per_box = ? WHERE id = 1").run(pricePerBox);
-  }
-  if (tipPercentage !== undefined) {
-    db.prepare("UPDATE meta SET tip_percentage = ? WHERE id = 1").run(tipPercentage);
-  }
-  if (grandPrizePercentage !== undefined) {
-    db.prepare("UPDATE meta SET grand_prize_percentage = ? WHERE id = 1").run(grandPrizePercentage);
-  }
-  
-  notifyClients();
+  await docRef.update(updates);
   res.json({ success: true });
 });
 
-app.post('/scratch', (req, res) => {
+app.post('/scratch', async (req, res) => {
   const { horseNumber, isScratched } = req.body;
-  
-  // Can only scratch valid horses 1-24
-  if (horseNumber < 1 || horseNumber > 24) {
-    return res.status(400).json({ error: 'Invalid horse number' });
+  if (horseNumber < 1 || horseNumber > 24) return res.status(400).json({ error: 'Invalid horse number' });
+
+  try {
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      let scratched = data.scratchedHorses || [];
+
+      if (isScratched && !scratched.includes(horseNumber)) {
+        scratched.push(horseNumber);
+      } else if (!isScratched) {
+        scratched = scratched.filter(h => h !== horseNumber);
+      }
+
+      t.update(docRef, { scratchedHorses: scratched });
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  const meta = db.prepare('SELECT scratched_horses FROM meta WHERE id = 1').get();
-  let scratched = meta.scratched_horses ? JSON.parse(meta.scratched_horses) : [];
-
-  if (isScratched && !scratched.includes(horseNumber)) {
-    scratched.push(horseNumber);
-  } else if (!isScratched) {
-    scratched = scratched.filter(h => h !== horseNumber);
-  }
-
-  db.prepare("UPDATE meta SET scratched_horses = ? WHERE id = 1").run(JSON.stringify(scratched));
-  
-  notifyClients();
-  res.json({ success: true, scratchedHorses: scratched });
 });
 
-app.post('/active-horses', (req, res) => {
+app.post('/active-horses', async (req, res) => {
   const { horseNumber, isActive } = req.body;
   if (horseNumber < 1 || horseNumber > 24) return res.status(400).json({ error: 'Invalid horse number' });
 
-  const meta = db.prepare('SELECT status, active_horses FROM meta WHERE id = 1').get();
-  if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Board is locked' });
+  try {
+    let newActive = [];
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      if (data.status !== 'OPEN') throw new Error('Board is locked');
 
-  let active = meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1);
-  
-  if (isActive && !active.includes(horseNumber)) {
-    active.push(horseNumber);
-    active.sort((a,b) => a - b);
-  } else if (!isActive) {
-    active = active.filter(h => h !== horseNumber);
+      let active = data.activeHorses ? [...data.activeHorses] : Array.from({length: 20}, (_, i) => i + 1);
+      
+      if (isActive && !active.includes(horseNumber)) {
+        active.push(horseNumber);
+        active.sort((a,b) => a - b);
+      } else if (!isActive) {
+        active = active.filter(h => h !== horseNumber);
+      }
+
+      newActive = active;
+      t.update(docRef, { activeHorses: active });
+    });
+    res.json({ success: true, activeHorses: newActive });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-
-  db.prepare("UPDATE meta SET active_horses = ? WHERE id = 1").run(JSON.stringify(active));
-  
-  notifyClients();
-  res.json({ success: true, activeHorses: active });
 });
 
-app.post('/reset', (req, res) => {
-  db.transaction(() => {
-    db.prepare("UPDATE meta SET status = 'OPEN', horses = NULL, win_horse = NULL, show_horse = NULL, scratched_horses = '[]', active_horses = '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' WHERE id = 1").run();
-    db.prepare("UPDATE boxes SET owner = NULL").run();
-  })();
-  notifyClients();
+app.post('/reset', async (req, res) => {
+  await docRef.update({
+    status: 'OPEN',
+    horses: null,
+    winHorse: null,
+    showHorse: null,
+    scratchedHorses: [],
+    activeHorses: Array.from({length: 20}, (_, i) => i + 1),
+    boxes: []
+  });
   res.json({ success: true });
 });
 
 // Serve Frontend in Production
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-app.get('*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
