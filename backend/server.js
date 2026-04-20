@@ -34,6 +34,7 @@ function getBoardState() {
     tipPercentage: meta.tip_percentage ?? 0,
     grandPrizePercentage: meta.grand_prize_percentage ?? 50,
     scratchedHorses: meta.scratched_horses ? JSON.parse(meta.scratched_horses) : [],
+    activeHorses: meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1),
     boxes: boxes
   };
 }
@@ -90,10 +91,13 @@ app.post('/quick-pick', (req, res) => {
   const { quantity, owner } = req.body;
   if (!owner || quantity <= 0) return res.status(400).json({ error: 'Invalid data' });
 
-  const meta = db.prepare('SELECT status FROM meta WHERE id = 1').get();
+  const meta = db.prepare('SELECT status, active_horses FROM meta WHERE id = 1').get();
   if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Board is locked' });
 
-  const available = db.prepare('SELECT x, y FROM boxes WHERE owner IS NULL AND x != y').all();
+  const activeHorses = meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1);
+  const gridSize = activeHorses.length;
+
+  const available = db.prepare('SELECT x, y FROM boxes WHERE owner IS NULL AND x != y AND x < ? AND y < ?').all(gridSize, gridSize);
   if (available.length < quantity) return res.status(400).json({ error: 'Not enough empty boxes' });
 
   // Shuffle available
@@ -116,10 +120,10 @@ app.post('/quick-pick', (req, res) => {
 });
 
 app.post('/draw', (req, res) => {
-  const meta = db.prepare('SELECT status FROM meta WHERE id = 1').get();
+  const meta = db.prepare('SELECT status, active_horses FROM meta WHERE id = 1').get();
   if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Already drawn' });
 
-  let horses = Array.from({length: 20}, (_, i) => i + 1);
+  let horses = meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1);
   // Shuffle horses
   for (let i = horses.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -188,9 +192,31 @@ app.post('/scratch', (req, res) => {
   res.json({ success: true, scratchedHorses: scratched });
 });
 
+app.post('/active-horses', (req, res) => {
+  const { horseNumber, isActive } = req.body;
+  if (horseNumber < 1 || horseNumber > 24) return res.status(400).json({ error: 'Invalid horse number' });
+
+  const meta = db.prepare('SELECT status, active_horses FROM meta WHERE id = 1').get();
+  if (meta.status !== 'OPEN') return res.status(400).json({ error: 'Board is locked' });
+
+  let active = meta.active_horses ? JSON.parse(meta.active_horses) : Array.from({length: 20}, (_, i) => i + 1);
+  
+  if (isActive && !active.includes(horseNumber)) {
+    active.push(horseNumber);
+    active.sort((a,b) => a - b);
+  } else if (!isActive) {
+    active = active.filter(h => h !== horseNumber);
+  }
+
+  db.prepare("UPDATE meta SET active_horses = ? WHERE id = 1").run(JSON.stringify(active));
+  
+  notifyClients();
+  res.json({ success: true, activeHorses: active });
+});
+
 app.post('/reset', (req, res) => {
   db.transaction(() => {
-    db.prepare("UPDATE meta SET status = 'OPEN', horses = NULL, win_horse = NULL, show_horse = NULL, scratched_horses = '[]' WHERE id = 1").run();
+    db.prepare("UPDATE meta SET status = 'OPEN', horses = NULL, win_horse = NULL, show_horse = NULL, scratched_horses = '[]', active_horses = '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]' WHERE id = 1").run();
     db.prepare("UPDATE boxes SET owner = NULL").run();
   })();
   notifyClients();

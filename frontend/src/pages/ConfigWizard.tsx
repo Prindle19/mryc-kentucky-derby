@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { fetchBoard, updateSettings, type BoardState } from '../api/api';
+import { fetchBoard, updateSettings, toggleActiveHorse, type BoardState } from '../api/api';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: (string | undefined | null | false)[]) {
+  return twMerge(clsx(inputs));
+}
 import { useNavigate } from 'react-router-dom';
 
 export default function ConfigWizard() {
@@ -30,7 +36,8 @@ export default function ConfigWizard() {
   if (!state) return <div className="p-10 text-white">Loading Config...</div>;
 
   // Financial Projections based on a Sold Out Board (Clean Denominations)
-  const TOTAL_BOXES = 380;
+  const gridSize = state.activeHorses.length;
+  const TOTAL_BOXES = (gridSize * gridSize) - gridSize;
   const grossPot = TOTAL_BOXES * price;
   
   // Tip gets exact percentage, rounded down to nearest dollar
@@ -38,10 +45,11 @@ export default function ConfigWizard() {
   const prizePool = grossPot - tipAmount;
   
   // Column winners always round down to the nearest $5
+  const columnWinnerCount = Math.max(0, gridSize - 2);
   const rawColumnPool = prizePool * ((100 - split) / 100);
-  const rawColumnPrizeEach = rawColumnPool / 18;
+  const rawColumnPrizeEach = columnWinnerCount > 0 ? rawColumnPool / columnWinnerCount : 0;
   const columnPrizeEach = Math.floor(rawColumnPrizeEach / 5) * 5;
-  const totalColumnPayout = columnPrizeEach * 18;
+  const totalColumnPayout = columnPrizeEach * columnWinnerCount;
   
   // Grand Prize gets EVERYTHING ELSE in the prize pool (the odd ball)
   const grandPrize = prizePool - totalColumnPayout;
@@ -58,7 +66,36 @@ export default function ConfigWizard() {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Controls Panel */}
           <div className="flex-1 bg-white p-8 rounded-2xl shadow-md border border-slate-200">
-            <h2 className="text-2xl font-bold mb-6 text-[#1B365D]">Adjust Parameters</h2>
+            <h2 className="text-2xl font-bold mb-6 text-[#1B365D]">Active Roster & Parameters</h2>
+            
+            <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-xl">
+              <label className="block text-sm font-bold text-red-800 mb-2 uppercase tracking-wider">Early Scratches</label>
+              <p className="text-xs text-red-600 mb-3 font-semibold">WARNING: Removing horses will permanently shrink the grid. ONLY do this BEFORE selling any boxes, otherwise sold boxes will fall off the board!</p>
+              <div className="flex flex-wrap gap-1">
+                {Array.from({length: 24}).map((_, i) => {
+                   const horseNum = i + 1;
+                   const isActive = state.activeHorses.includes(horseNum);
+                   return (
+                     <button 
+                       key={horseNum}
+                       onClick={async () => {
+                         try {
+                           const res = await toggleActiveHorse(horseNum, !isActive);
+                           setState({...state, activeHorses: res.activeHorses});
+                         } catch(e:any) { alert(e.message); }
+                       }}
+                       className={cn(
+                         "w-8 h-8 rounded text-xs font-bold border transition-colors",
+                         isActive ? "bg-[#1B365D] text-white border-[#0B1D3A]" : "bg-white text-slate-400 border-slate-300 opacity-50 hover:bg-slate-100 line-through"
+                       )}
+                     >
+                       {horseNum}
+                     </button>
+                   );
+                })}
+              </div>
+              <p className="text-xs text-slate-500 mt-3 font-bold">Grid Size: {gridSize}x{gridSize}</p>
+            </div>
             
             <div className="mb-8">
               <label className="block text-sm font-bold text-slate-500 mb-2 uppercase tracking-wider">Price per Box ($)</label>
@@ -69,7 +106,7 @@ export default function ConfigWizard() {
                 onChange={e => setPrice(Number(e.target.value))}
                 className="w-full p-4 border-2 border-slate-200 rounded-xl text-2xl font-black focus:border-[#1B365D] focus:outline-none transition-colors"
               />
-              <p className="text-xs text-slate-400 mt-2">The cost of a single box. The grid has 380 valid boxes.</p>
+              <p className="text-xs text-slate-400 mt-2">The cost of a single box. The current grid has {TOTAL_BOXES} valid boxes.</p>
             </div>
 
             <div className="mb-8">
@@ -99,7 +136,7 @@ export default function ConfigWizard() {
                 onChange={e => setSplit(Number(e.target.value))}
                 className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-yellow-500"
               />
-              <p className="text-xs text-slate-400 mt-2">Percentage of the remaining Prize Pool awarded to the EXACTA winner. The other {100 - split}% is divided evenly among the other 18 column winners.</p>
+              <p className="text-xs text-slate-400 mt-2">Percentage of the remaining Prize Pool awarded to the EXACTA winner. The other {100 - split}% is divided evenly among the other {columnWinnerCount} column winners.</p>
             </div>
 
             <button 
@@ -118,7 +155,7 @@ export default function ConfigWizard() {
                 <h2 className="text-2xl font-bold text-emerald-400 uppercase tracking-wider">Live Financial Preview</h2>
               </div>
               <p className="text-slate-400 text-sm mb-8 border-b border-white/10 pb-4">
-                These are the projected payouts assuming a completely sold out board (380 boxes).
+                These are the projected payouts assuming a completely sold out board ({TOTAL_BOXES} boxes).
               </p>
 
               <div className="flex flex-col gap-6">
@@ -147,7 +184,7 @@ export default function ConfigWizard() {
                   <span className="text-3xl font-black text-yellow-400">{grandPrize.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-300 font-medium">18x Column Winners (Each)</span>
+                  <span className="text-slate-300 font-medium">{columnWinnerCount}x Column Winners (Each)</span>
                   <span className="text-2xl font-bold text-white">{columnPrizeEach.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}</span>
                 </div>
               </div>

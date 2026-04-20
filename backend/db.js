@@ -15,7 +15,8 @@ db.exec(`
     price_per_box INTEGER DEFAULT 3,
     tip_percentage INTEGER DEFAULT 0,
     grand_prize_percentage INTEGER DEFAULT 50,
-    scratched_horses TEXT DEFAULT '[]'
+    scratched_horses TEXT DEFAULT '[]',
+    active_horses TEXT DEFAULT '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]'
   );
 
   CREATE TABLE IF NOT EXISTS boxes (
@@ -29,7 +30,7 @@ db.exec(`
 // Insert initial meta if empty
 const metaCount = db.prepare('SELECT COUNT(*) as count FROM meta').get().count;
 if (metaCount === 0) {
-  db.prepare("INSERT INTO meta (id, status, horses, win_horse, show_horse, price_per_box, tip_percentage, grand_prize_percentage, scratched_horses) VALUES (1, 'OPEN', NULL, NULL, NULL, 3, 0, 50, '[]')").run();
+  db.prepare("INSERT INTO meta (id, status, horses, win_horse, show_horse, price_per_box, tip_percentage, grand_prize_percentage, scratched_horses, active_horses) VALUES (1, 'OPEN', NULL, NULL, NULL, 3, 0, 50, '[]', '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]')").run();
 } else {
   // Safely add columns to existing DB
   try { db.exec('ALTER TABLE meta ADD COLUMN win_horse INTEGER'); } catch(e) {}
@@ -38,6 +39,7 @@ if (metaCount === 0) {
   try { db.exec('ALTER TABLE meta ADD COLUMN tip_percentage INTEGER DEFAULT 0'); } catch(e) {}
   try { db.exec('ALTER TABLE meta ADD COLUMN grand_prize_percentage INTEGER DEFAULT 50'); } catch(e) {}
   try { db.exec("ALTER TABLE meta ADD COLUMN scratched_horses TEXT DEFAULT '[]'"); } catch(e) {}
+  try { db.exec("ALTER TABLE meta ADD COLUMN active_horses TEXT DEFAULT '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]'"); } catch(e) {}
 }
 
 // Insert 400 boxes if empty

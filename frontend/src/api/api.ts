@@ -15,6 +15,7 @@ export interface BoardState {
   tipPercentage: number;
   grandPrizePercentage: number;
   scratchedHorses: number[];
+  activeHorses: number[];
   boxes: Box[];
 }
 
@@ -99,6 +100,17 @@ export const toggleScratch = async (horseNumber: number, isScratched: boolean) =
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to toggle scratch');
+  return data;
+};
+
+export const toggleActiveHorse = async (horseNumber: number, isActive: boolean) => {
+  const res = await fetch(`${API_BASE}/active-horses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ horseNumber, isActive })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to toggle active horse');
   return data;
 };
 

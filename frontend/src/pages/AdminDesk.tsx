@@ -117,23 +117,24 @@ export default function AdminDesk() {
   };
 
   // Mini-map click to move viewport
+  const gridSize = state.activeHorses ? state.activeHorses.length : 20;
+
   const handleMiniMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const xRatio = (e.clientX - rect.left) / rect.width;
     const yRatio = (e.clientY - rect.top) / rect.height;
     
-    // xRatio maps to 0-19. We want the center of the 10x10 viewport to be at the click.
-    let newX = Math.floor(xRatio * 20) - 5;
-    let newY = Math.floor(yRatio * 20) - 5;
+    let newX = Math.floor(xRatio * gridSize) - 5;
+    let newY = Math.floor(yRatio * gridSize) - 5;
     
-    newX = Math.max(0, Math.min(10, newX));
-    newY = Math.max(0, Math.min(10, newY));
+    newX = Math.max(0, Math.min(Math.max(0, gridSize - 10), newX));
+    newY = Math.max(0, Math.min(Math.max(0, gridSize - 10), newY));
     
     setVpX(newX);
     setVpY(newY);
   };
 
-  const availableBoxes = 380 - state.boxes.filter(b => b.owner).length;
+  const availableBoxes = (gridSize * gridSize - gridSize) - state.boxes.filter(b => b.owner && b.x < gridSize && b.y < gridSize).length;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col">
@@ -309,10 +310,13 @@ export default function AdminDesk() {
              <h2 className="font-bold text-lg mb-2">Mini-Map</h2>
              <div className="flex-1 relative bg-slate-200 rounded overflow-hidden cursor-crosshair border border-slate-300" onClick={handleMiniMapClick}>
                {/* Minimap grid dots */}
-               <div className="absolute inset-0 grid grid-cols-[repeat(20,minmax(0,1fr))] grid-rows-[repeat(20,minmax(0,1fr))] gap-px p-1">
-                 {Array.from({length: 400}).map((_, i) => {
-                   const x = i % 20;
-                   const y = Math.floor(i / 20);
+               <div 
+                 className="absolute inset-0 grid gap-px p-1"
+                 style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0,1fr))`, gridTemplateRows: `repeat(${gridSize}, minmax(0,1fr))` }}
+               >
+                 {Array.from({length: gridSize * gridSize}).map((_, i) => {
+                   const x = i % gridSize;
+                   const y = Math.floor(i / gridSize);
                    const isDiag = x === y;
                    const isSold = state.boxes.find(b => b.x === x && b.y === y)?.owner;
                    const isPending = pending.some(p => p.x === x && p.y === y);
@@ -331,10 +335,10 @@ export default function AdminDesk() {
                <div 
                  className="absolute border-2 border-red-500 bg-red-500/10 pointer-events-none transition-all duration-200"
                  style={{
-                   left: `calc( ${vpX} * 5% + 4px )`,
-                   top: `calc( ${vpY} * 5% + 4px )`,
-                   width: 'calc( 50% - 8px )',
-                   height: 'calc( 50% - 8px )'
+                   left: `calc( ${vpX} * (100% / ${gridSize}) + 4px )`,
+                   top: `calc( ${vpY} * (100% / ${gridSize}) + 4px )`,
+                   width: `calc( ${Math.min(10, gridSize)} * (100% / ${gridSize}) - 8px )`,
+                   height: `calc( ${Math.min(10, gridSize)} * (100% / ${gridSize}) - 8px )`
                  }}
                />
              </div>
@@ -347,9 +351,9 @@ export default function AdminDesk() {
              <h2 className="font-bold text-2xl">Viewport</h2>
              <div className="flex gap-2">
                <button onClick={() => {setVpX(Math.max(0, vpX-1));}} className="p-2 bg-slate-100 rounded hover:bg-slate-200">←</button>
-               <button onClick={() => {setVpX(Math.min(10, vpX+1));}} className="p-2 bg-slate-100 rounded hover:bg-slate-200">→</button>
+               <button onClick={() => {setVpX(Math.min(Math.max(0, gridSize-10), vpX+1));}} className="p-2 bg-slate-100 rounded hover:bg-slate-200">→</button>
                <button onClick={() => {setVpY(Math.max(0, vpY-1));}} className="p-2 bg-slate-100 rounded hover:bg-slate-200">↑</button>
-               <button onClick={() => {setVpY(Math.min(10, vpY+1));}} className="p-2 bg-slate-100 rounded hover:bg-slate-200">↓</button>
+               <button onClick={() => {setVpY(Math.min(Math.max(0, gridSize-10), vpY+1));}} className="p-2 bg-slate-100 rounded hover:bg-slate-200">↓</button>
              </div>
            </div>
            
@@ -360,6 +364,8 @@ export default function AdminDesk() {
                const x = vpX + localX;
                const y = vpY + localY;
                
+               if (x >= gridSize || y >= gridSize) return <div key={i} className="bg-transparent" />;
+
                const isDiag = x === y;
                const box = state.boxes.find(b => b.x === x && b.y === y);
                const isSold = !!box?.owner;
@@ -428,12 +434,13 @@ export default function AdminDesk() {
                      return !!state.scratchedHorses?.includes(state.horses[x]) || !!state.scratchedHorses?.includes(state.horses[y]);
                    };
                    
-                   const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && !isBoxScratched(b.x, b.y));
+                   const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && b.x < gridSize && b.y < gridSize && !isBoxScratched(b.x, b.y));
                    const pot = validSoldBoxes.length * (state.pricePerBox || 3);
                    const tipAmount = Math.floor(pot * ((state.tipPercentage || 0) / 100));
                    const prizePool = pot - tipAmount;
-                   const columnPrizeEach = Math.floor(((prizePool * ((100 - (state.grandPrizePercentage || 50)) / 100)) / 18) / 5) * 5;
-                   const grandPrize = prizePool - (columnPrizeEach * 18);
+                   const columnWinnerCount = Math.max(0, gridSize - 2);
+                   const columnPrizeEach = columnWinnerCount > 0 ? Math.floor(((prizePool * ((100 - (state.grandPrizePercentage || 50)) / 100)) / columnWinnerCount) / 5) * 5 : 0;
+                   const grandPrize = prizePool - (columnPrizeEach * columnWinnerCount);
 
                    const winX = state.horses?.indexOf(state.winHorse);
                    const showY = state.showHorse ? state.horses?.indexOf(state.showHorse) : -1;

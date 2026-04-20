@@ -62,18 +62,21 @@ export default function BigBoard() {
     return !!state.scratchedHorses?.includes(horseX) || !!state.scratchedHorses?.includes(horseY);
   };
 
-  const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && !isBoxScratched(b.x, b.y));
+  const gridSize = state.activeHorses ? state.activeHorses.length : 20;
+  const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && b.x < gridSize && b.y < gridSize && !isBoxScratched(b.x, b.y));
   const totalSold = validSoldBoxes.length;
-  const totalBoxes = 380;
+  const totalBoxes = (gridSize * gridSize) - gridSize;
   const pot = totalSold * (state.pricePerBox || 3);
   
   const tipAmount = Math.floor(pot * ((state.tipPercentage || 0) / 100));
   const prizePool = pot - tipAmount;
   
+  const columnWinnerCount = Math.max(0, gridSize - 2);
   const rawColumnPool = prizePool * ((100 - (state.grandPrizePercentage || 50)) / 100);
-  const columnPrizeEach = Math.floor((rawColumnPool / 18) / 5) * 5; // Round down to nearest $5
+  const rawColumnPrizeEach = columnWinnerCount > 0 ? rawColumnPool / columnWinnerCount : 0;
+  const columnPrizeEach = Math.floor(rawColumnPrizeEach / 5) * 5; // Round down to nearest $5
   
-  const totalColumnPayout = columnPrizeEach * 18;
+  const totalColumnPayout = columnPrizeEach * columnWinnerCount;
   const grandPrize = prizePool - totalColumnPayout; // Grand prize absorbs the odd dollars
 
   return (
@@ -143,7 +146,7 @@ export default function BigBoard() {
                   <div className="w-8 pr-1" />
                   {/* Actual X labels */}
                   <div className="flex-1 flex gap-[2px] px-[2px]">
-                    {Array.from({length: 20}).map((_, i) => {
+                    {Array.from({length: gridSize}).map((_, i) => {
                       const horseNum = state.horses ? state.horses[i] : null;
                       const style = horseNum ? getSaddleClothStyle(horseNum) : { bg: 'transparent', text: 'rgba(255,255,255,0.8)' };
                       const isScratched = horseNum && state.scratchedHorses?.includes(horseNum);
@@ -173,7 +176,7 @@ export default function BigBoard() {
             <div className="flex-1 flex">
               {/* Y Axis Labels */}
               <div className="w-8 flex flex-col gap-[2px] py-[2px] pr-1">
-                {Array.from({length: 20}).map((_, i) => {
+                {Array.from({length: gridSize}).map((_, i) => {
                   const horseNum = state.horses ? state.horses[i] : null;
                   const style = horseNum ? getSaddleClothStyle(horseNum) : { bg: 'transparent', text: 'rgba(255,255,255,0.8)' };
                   const isScratched = horseNum && state.scratchedHorses?.includes(horseNum);
@@ -255,9 +258,9 @@ export default function BigBoard() {
                     </div>
                   )}
 
-                  {Array.from({length: 20}).map((_, y) => (
+                  {Array.from({length: gridSize}).map((_, y) => (
                     <div key={y} className="flex-1 flex gap-[2px]">
-                       {Array.from({length: 20}).map((_, x) => {
+                       {Array.from({length: gridSize}).map((_, x) => {
                          const isDiagonal = x === y;
                          const box = state.boxes.find(b => b.x === x && b.y === y);
                          const isSold = box?.owner;
