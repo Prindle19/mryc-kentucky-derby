@@ -13,6 +13,7 @@ export default function ConfigWizard() {
   const [state, setState] = useState<BoardState | null>(null);
   const [price, setPrice] = useState(3);
   const [tip, setTip] = useState(0);
+  const [houseCut, setHouseCut] = useState(0);
   const [split, setSplit] = useState(50);
 
   useEffect(() => {
@@ -20,13 +21,14 @@ export default function ConfigWizard() {
       setState(data);
       setPrice(data.pricePerBox);
       setTip(data.tipPercentage);
+      setHouseCut(data.housePercentage || 0);
       setSplit(data.grandPrizePercentage);
     });
   }, []);
 
   const handleSave = async () => {
     try {
-      await updateSettings(price, tip, split);
+      await updateSettings(price, tip, houseCut, split);
       navigate('/admin');
     } catch (e: any) {
       alert(e.message);
@@ -40,9 +42,10 @@ export default function ConfigWizard() {
   const TOTAL_BOXES = (gridSize * gridSize) - gridSize;
   const grossPot = TOTAL_BOXES * price;
   
-  // Tip gets exact percentage, rounded down to nearest dollar
+  // Tip and House Cut get exact percentages, rounded down to nearest dollar
   const tipAmount = Math.floor(grossPot * (tip / 100));
-  const prizePool = grossPot - tipAmount;
+  const houseAmount = Math.floor(grossPot * (houseCut / 100));
+  const prizePool = grossPot - tipAmount - houseAmount;
   
   // Column winners always round down to the nearest $5
   const columnWinnerCount = Math.max(0, gridSize - 2);
@@ -121,7 +124,22 @@ export default function ConfigWizard() {
                 onChange={e => setTip(Number(e.target.value))}
                 className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#1B365D]"
               />
-              <p className="text-xs text-slate-400 mt-2">Percentage taken off the top of the Gross Pot for the house/staff.</p>
+              <p className="text-xs text-slate-400 mt-2">Percentage taken off the top of the Gross Pot for the bar staff tip.</p>
+            </div>
+
+            <div className="mb-8">
+              <div className="flex justify-between items-end mb-2">
+                <label className="text-sm font-bold text-slate-500 uppercase tracking-wider">House Cut (%)</label>
+                <span className="font-black text-2xl text-purple-700">{houseCut}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" max="50" step="5"
+                value={houseCut}
+                onChange={e => setHouseCut(Number(e.target.value))}
+                className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+              <p className="text-xs text-slate-400 mt-2">Percentage taken off the top of the Gross Pot for the organization/house costs.</p>
             </div>
 
             <div className="mb-8">
@@ -168,6 +186,13 @@ export default function ConfigWizard() {
                   <span className="text-lg font-medium">Minus Staff Tip ({tip}%):</span>
                   <span className="text-3xl font-black">-{tipAmount.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}</span>
                 </div>
+
+                {houseCut > 0 && (
+                  <div className="flex justify-between items-end text-purple-300">
+                    <span className="text-lg font-medium">Minus House Cut ({houseCut}%):</span>
+                    <span className="text-3xl font-black">-{houseAmount.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}</span>
+                  </div>
+                )}
 
                 <div className="border-t border-white/20 pt-6 flex justify-between items-end">
                   <span className="text-xl text-emerald-300 font-bold uppercase tracking-wider">Total Prize Pool:</span>

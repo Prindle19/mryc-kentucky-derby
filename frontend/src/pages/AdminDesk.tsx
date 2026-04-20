@@ -437,7 +437,8 @@ export default function AdminDesk() {
                    const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && b.x < gridSize && b.y < gridSize && !isBoxScratched(b.x, b.y));
                    const pot = validSoldBoxes.length * (state.pricePerBox || 3);
                    const tipAmount = Math.floor(pot * ((state.tipPercentage || 0) / 100));
-                   const prizePool = pot - tipAmount;
+                   const houseAmount = Math.floor(pot * ((state.housePercentage || 0) / 100));
+                   const prizePool = pot - tipAmount - houseAmount;
                    const columnWinnerCount = Math.max(0, gridSize - 2);
                    const columnPrizeEach = columnWinnerCount > 0 ? Math.floor(((prizePool * ((100 - (state.grandPrizePercentage || 50)) / 100)) / columnWinnerCount) / 5) * 5 : 0;
                    const grandPrize = prizePool - (columnPrizeEach * columnWinnerCount);
@@ -461,6 +462,19 @@ export default function AdminDesk() {
 
                 const refundEntries = Object.entries(refundsOwed).sort((a,b) => b[1] - a[1]);
                 const payoutEntries = Object.entries(payoutsOwed).sort((a,b) => b[1] - a[1]);
+
+                let tipDisplay = 0;
+                let houseDisplay = 0;
+                if (state.winHorse) {
+                   const isBoxScratched = (x: number, y: number) => {
+                     if (!state.horses) return false;
+                     return !!state.scratchedHorses?.includes(state.horses[x]) || !!state.scratchedHorses?.includes(state.horses[y]);
+                   };
+                   const validSoldBoxes = state.boxes.filter(b => b.owner && b.x !== b.y && b.x < gridSize && b.y < gridSize && !isBoxScratched(b.x, b.y));
+                   const pot = validSoldBoxes.length * (state.pricePerBox || 3);
+                   tipDisplay = Math.floor(pot * ((state.tipPercentage || 0) / 100));
+                   houseDisplay = Math.floor(pot * ((state.housePercentage || 0) / 100));
+                }
 
                 return (
                   <div className="flex flex-col gap-8">
@@ -490,11 +504,23 @@ export default function AdminDesk() {
                       </h3>
                       {!state.winHorse ? (
                         <p className="text-white/40 text-sm italic">Results not yet drawn.</p>
-                      ) : payoutEntries.length === 0 ? (
-                        <p className="text-white/40 text-sm italic">No winning boxes sold.</p>
                       ) : (
                         <div className="flex flex-col gap-2">
-                          {payoutEntries.map(([owner, amount]) => (
+                          {tipDisplay > 0 && (
+                            <div className="flex justify-between items-center bg-white/5 p-3 rounded-lg border border-white/10 mb-2">
+                              <span className="font-bold text-slate-300">Bar Staff Tip</span>
+                              <span className="font-black text-emerald-400 text-lg">${tipDisplay}</span>
+                            </div>
+                          )}
+                          {houseDisplay > 0 && (
+                            <div className="flex justify-between items-center bg-white/5 p-3 rounded-lg border border-white/10 mb-2">
+                              <span className="font-bold text-slate-300">House Cut</span>
+                              <span className="font-black text-purple-400 text-lg">${houseDisplay}</span>
+                            </div>
+                          )}
+                          {payoutEntries.length === 0 ? (
+                            <p className="text-white/40 text-sm italic mt-2">No winning boxes sold.</p>
+                          ) : payoutEntries.map(([owner, amount]) => (
                             <div key={owner} className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/30 shadow-sm">
                               <span className="font-bold text-emerald-100 truncate max-w-[150px]">{owner}</span>
                               <span className="font-black text-emerald-400 text-lg">${amount}</span>

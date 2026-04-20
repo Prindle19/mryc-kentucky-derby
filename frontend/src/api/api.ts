@@ -13,6 +13,7 @@ export interface BoardState {
   showHorse?: number | null;
   pricePerBox: number;
   tipPercentage: number;
+  housePercentage?: number;
   grandPrizePercentage: number;
   scratchedHorses: number[];
   activeHorses: number[];
@@ -76,10 +77,11 @@ export const setResults = async (winHorse?: number | null, showHorse?: number | 
   return data;
 };
 
-export const updateSettings = async (pricePerBox?: number, tipPercentage?: number, grandPrizePercentage?: number) => {
+export const updateSettings = async (pricePerBox?: number, tipPercentage?: number, housePercentage?: number, grandPrizePercentage?: number) => {
   const payload: any = {};
   if (pricePerBox !== undefined) payload.pricePerBox = pricePerBox;
   if (tipPercentage !== undefined) payload.tipPercentage = tipPercentage;
+  if (housePercentage !== undefined) payload.housePercentage = housePercentage;
   if (grandPrizePercentage !== undefined) payload.grandPrizePercentage = grandPrizePercentage;
 
   const res = await fetch(`${API_BASE}/settings`, {

@@ -25,6 +25,7 @@ async function initDB() {
       showHorse: null,
       pricePerBox: 3,
       tipPercentage: 0,
+      housePercentage: 0,
       grandPrizePercentage: 50,
       scratchedHorses: [],
       activeHorses: Array.from({length: 20}, (_, i) => i + 1),
@@ -203,10 +204,11 @@ app.post('/results', async (req, res) => {
 });
 
 app.post('/settings', async (req, res) => {
-  const { pricePerBox, tipPercentage, grandPrizePercentage } = req.body;
+  const { pricePerBox, tipPercentage, housePercentage, grandPrizePercentage } = req.body;
   const updates = {};
   if (pricePerBox !== undefined) updates.pricePerBox = pricePerBox;
   if (tipPercentage !== undefined) updates.tipPercentage = tipPercentage;
+  if (housePercentage !== undefined) updates.housePercentage = housePercentage;
   if (grandPrizePercentage !== undefined) updates.grandPrizePercentage = grandPrizePercentage;
   
   await docRef.update(updates);

@@ -69,7 +69,8 @@ export default function BigBoard() {
   const pot = totalSold * (state.pricePerBox || 3);
   
   const tipAmount = Math.floor(pot * ((state.tipPercentage || 0) / 100));
-  const prizePool = pot - tipAmount;
+  const houseAmount = Math.floor(pot * ((state.housePercentage || 0) / 100));
+  const prizePool = pot - tipAmount - houseAmount;
   
   const columnWinnerCount = Math.max(0, gridSize - 2);
   const rawColumnPool = prizePool * ((100 - (state.grandPrizePercentage || 50)) / 100);
