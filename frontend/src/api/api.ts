@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.DEV ? 'http://localhost:3000' : '';
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3000/api' : '/api';
 
 export interface Box {
   x: number;

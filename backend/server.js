@@ -54,7 +54,7 @@ function notifyClients() {
 }
 
 // SSE Endpoint
-app.get('/events', (req, res) => {
+app.get('/api/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -69,12 +69,12 @@ app.get('/events', (req, res) => {
   });
 });
 
-app.get('/board', (req, res) => {
+app.get('/api/board', (req, res) => {
   if (!cachedState) return res.status(503).json({ error: 'Starting up' });
   res.json(cachedState);
 });
 
-app.post('/buy', async (req, res) => {
+app.post('/api/buy', async (req, res) => {
   const { selections, owner } = req.body;
   if (!owner || !Array.isArray(selections) || selections.length === 0) {
     return res.status(400).json({ error: 'Invalid data' });
@@ -110,7 +110,7 @@ app.post('/buy', async (req, res) => {
   }
 });
 
-app.post('/quick-pick', async (req, res) => {
+app.post('/api/quick-pick', async (req, res) => {
   const { quantity, owner } = req.body;
   if (!owner || quantity <= 0) return res.status(400).json({ error: 'Invalid data' });
 
@@ -156,7 +156,7 @@ app.post('/quick-pick', async (req, res) => {
   }
 });
 
-app.post('/draw', async (req, res) => {
+app.post('/api/draw', async (req, res) => {
   try {
     await db.runTransaction(async (t) => {
       const doc = await t.get(docRef);
@@ -182,7 +182,7 @@ app.post('/draw', async (req, res) => {
   }
 });
 
-app.post('/results', async (req, res) => {
+app.post('/api/results', async (req, res) => {
   const { winHorse, showHorse } = req.body;
   
   try {
@@ -203,7 +203,7 @@ app.post('/results', async (req, res) => {
   }
 });
 
-app.post('/settings', async (req, res) => {
+app.post('/api/settings', async (req, res) => {
   const { pricePerBox, tipPercentage, housePercentage, grandPrizePercentage } = req.body;
   const updates = {};
   if (pricePerBox !== undefined) updates.pricePerBox = pricePerBox;
@@ -215,7 +215,7 @@ app.post('/settings', async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/scratch', async (req, res) => {
+app.post('/api/scratch', async (req, res) => {
   const { horseNumber, isScratched } = req.body;
   if (horseNumber < 1 || horseNumber > 24) return res.status(400).json({ error: 'Invalid horse number' });
 
@@ -239,7 +239,7 @@ app.post('/scratch', async (req, res) => {
   }
 });
 
-app.post('/active-horses', async (req, res) => {
+app.post('/api/active-horses', async (req, res) => {
   const { horseNumber, isActive } = req.body;
   if (horseNumber < 1 || horseNumber > 24) return res.status(400).json({ error: 'Invalid horse number' });
 
@@ -268,7 +268,7 @@ app.post('/active-horses', async (req, res) => {
   }
 });
 
-app.post('/reset', async (req, res) => {
+app.post('/api/reset', async (req, res) => {
   await docRef.update({
     status: 'OPEN',
     horses: null,
