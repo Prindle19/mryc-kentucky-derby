@@ -3,6 +3,7 @@ import Confetti from 'react-confetti';
 import { subscribeToBoard, type BoardState } from '../api/api';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -80,65 +81,82 @@ export default function BigBoard() {
   const totalColumnPayout = columnPrizeEach * columnWinnerCount;
   const grandPrize = prizePool - totalColumnPayout; // Grand prize absorbs the odd dollars
 
+  const isDesktop = windowSize.width >= 1024;
+
   return (
-    <div className="h-screen w-screen bg-[#f0f4f8] flex flex-col items-center justify-center overflow-hidden font-sans text-white">
+    <div className="h-[100dvh] w-screen bg-[#f0f4f8] flex flex-col items-center justify-center overflow-hidden font-sans text-white">
       <div 
-        className="relative bg-[#1B365D] border border-white/20 shadow-[0_0_40px_rgba(27,54,93,0.3)] flex flex-col"
-        style={{
-          aspectRatio: '16/9',
-          height: '98vh',
-        }}
+        className="relative bg-[#1B365D] border border-white/20 shadow-[0_0_40px_rgba(27,54,93,0.3)] flex flex-col w-full h-full lg:w-auto lg:h-[98vh] lg:aspect-video lg:rounded-xl overflow-hidden"
       >
         {/* Header section */}
-        <div className="h-[12%] flex items-center justify-between px-8 bg-white border-b-4 border-[#1B365D]">
-          <div className="flex items-center gap-8 h-full py-3">
-            <img src="/burgee.png" alt="MRYC Burgee" className="h-full w-auto object-contain flex-shrink-0" />
-            <div className="flex flex-col justify-center gap-1">
-               <span className="text-4xl lg:text-[3rem] leading-none font-serif text-[#0B1D3A] uppercase tracking-[0.05em]" style={{ fontFamily: 'Georgia, "Times New Roman", Times, serif' }}>Manasquan River Yacht Club</span>
-               <span className="text-sm lg:text-base text-slate-500 font-bold tracking-[0.3em] uppercase mt-1">Kentucky Derby Exacta Box Pool</span>
+        <div className="h-auto lg:h-[12%] flex flex-col lg:flex-row items-center justify-between p-2 lg:px-8 bg-white border-b-4 border-[#1B365D] gap-2 lg:gap-0 z-10 shrink-0">
+          <div className="flex flex-col lg:flex-row items-center gap-2 lg:gap-8 h-full lg:py-3 text-center lg:text-left">
+            <img src="/burgee.png" alt="MRYC Burgee" className="h-10 sm:h-12 lg:h-full w-auto object-contain flex-shrink-0" />
+            <div className="flex flex-col justify-center gap-0 lg:gap-1">
+               <span className="text-xl sm:text-2xl lg:text-[3rem] leading-none font-serif text-[#0B1D3A] uppercase tracking-[0.05em]" style={{ fontFamily: 'Georgia, "Times New Roman", Times, serif' }}>Manasquan River Yacht Club</span>
+               <span className="text-[0.6rem] sm:text-sm lg:text-base text-slate-500 font-bold tracking-[0.1em] lg:tracking-[0.3em] uppercase lg:mt-1">Kentucky Derby Exacta Box Pool</span>
             </div>
           </div>
-          <div className="flex gap-16 text-center">
+          <div className="flex gap-4 lg:gap-16 text-center bg-slate-50 lg:bg-transparent w-full lg:w-auto justify-center p-2 lg:p-0 rounded-lg border lg:border-none border-slate-200">
             <div className="flex flex-col items-center justify-center">
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Status</div>
+              <div className="text-[0.6rem] lg:text-xs text-slate-400 font-bold uppercase tracking-wider mb-0 lg:mb-1">Status</div>
               <div className={cn(
-                "text-2xl font-black uppercase tracking-wider", 
+                "text-sm sm:text-base lg:text-2xl font-black uppercase tracking-wider", 
                 (state.winHorse && state.showHorse) ? "text-yellow-500 drop-shadow-md scale-110 transition-transform" :
                 state.winHorse ? "text-emerald-500 drop-shadow-sm" :
                 state.status === 'DRAWN' ? "text-emerald-600" : "text-[#1B365D]"
               )}>
-                {(state.winHorse && state.showHorse) ? 'RESULTS OFFICIAL' :
-                 state.winHorse ? '1ST PLACE REVEALED' :
-                 state.status === 'DRAWN' ? 'LOCKED & DRAWN' : 'SALES OPEN'}
+                {(state.winHorse && state.showHorse) ? 'OFFICIAL' :
+                 state.winHorse ? '1ST REVEALED' :
+                 state.status === 'DRAWN' ? 'DRAWN' : 'SALES OPEN'}
               </div>
             </div>
             <div className="flex flex-col items-center justify-center">
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Sold</div>
-              <div className="text-2xl font-black text-[#1B365D]">{totalSold} <span className="text-slate-400 text-lg">/ {totalBoxes}</span></div>
+              <div className="text-[0.6rem] lg:text-xs text-slate-400 font-bold uppercase tracking-wider mb-0 lg:mb-1">Sold</div>
+              <div className="text-sm sm:text-base lg:text-2xl font-black text-[#1B365D]">{totalSold} <span className="text-slate-400 text-xs lg:text-lg">/ {totalBoxes}</span></div>
             </div>
             <div className="flex flex-col items-center justify-center">
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Total Pot</div>
-              <div className="text-2xl font-black text-emerald-600 drop-shadow-sm">${pot}</div>
+              <div className="text-[0.6rem] lg:text-xs text-slate-400 font-bold uppercase tracking-wider mb-0 lg:mb-1">Total Pot</div>
+              <div className="text-sm sm:text-base lg:text-2xl font-black text-emerald-600 drop-shadow-sm">${pot}</div>
             </div>
           </div>
         </div>
 
         {/* Board section */}
-        <div className="flex-1 flex p-2 pb-4 pr-4">
-          
-          {/* Y Axis Title Area (Leftmost) */}
-          <div className="w-12 flex items-center justify-center relative">
-             <div className="-rotate-90 text-white/80 font-black tracking-[0.3em] text-xl uppercase whitespace-nowrap absolute">
-                SHOW (2nd Place)
-             </div>
-          </div>
+        <div className="flex-1 overflow-hidden relative">
+          <TransformWrapper
+            key={isDesktop ? 'desktop' : 'mobile'}
+            initialScale={isDesktop ? 1 : 0.6}
+            minScale={isDesktop ? 1 : 0.2}
+            maxScale={4}
+            centerOnInit={true}
+            wheel={{ step: 0.1, disabled: isDesktop }}
+            pinch={{ step: 5 }}
+            panning={{ disabled: isDesktop }}
+          >
+            {({ zoomIn, zoomOut, resetTransform }) => (
+              <>
+                <div className="absolute top-2 right-2 z-50 flex gap-2 opacity-70 hover:opacity-100 transition-opacity lg:hidden">
+                  <button className="bg-black/40 px-3 py-1 rounded text-white backdrop-blur-sm font-black" onClick={() => zoomIn()}>+</button>
+                  <button className="bg-black/40 px-3 py-1 rounded text-white backdrop-blur-sm font-black" onClick={() => zoomOut()}>-</button>
+                  <button className="bg-black/40 px-3 py-1 rounded text-white backdrop-blur-sm text-xs font-bold" onClick={() => resetTransform()}>RESET</button>
+                </div>
+                <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full min-w-max min-h-max lg:min-w-full lg:min-h-full">
+                  <div className="w-[1000px] h-[750px] lg:w-full lg:h-full flex p-2 pb-4 pr-4">
+                    
+                    {/* Y Axis Title Area (Leftmost) */}
+                    <div className="w-8 lg:w-12 flex items-center justify-center relative">
+                       <div className="-rotate-90 text-white/80 font-black tracking-[0.2em] lg:tracking-[0.3em] text-sm lg:text-xl uppercase whitespace-nowrap absolute">
+                          SHOW (2nd Place)
+                       </div>
+                    </div>
           
           <div className="flex-1 flex flex-col">
             
             {/* Top Area: X Axis Title + X Axis Labels */}
             <div className="flex flex-col mb-1">
                 {/* Title */}
-                <div className="text-center text-white/80 font-black tracking-[0.3em] text-xl uppercase leading-none pb-2 pl-8">
+                <div className="text-center text-white/80 font-black tracking-[0.2em] lg:tracking-[0.3em] text-sm lg:text-xl uppercase leading-none pb-2 pl-8 lg:pl-12">
                    WIN (1st Place)
                 </div>
                 {/* Labels */}
@@ -299,6 +317,11 @@ export default function BigBoard() {
               </div>
             </div>
           </div>
+                  </div>
+                </TransformComponent>
+              </>
+            )}
+          </TransformWrapper>
         </div>
       </div>
     </div>
