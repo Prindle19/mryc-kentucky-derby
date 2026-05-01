@@ -18,6 +18,7 @@ export interface BoardState {
   scratchedHorses: number[];
   activeHorses: number[];
   boxes: Box[];
+  paidPlayers?: string[];
 }
 
 export const fetchBoard = async (): Promise<BoardState> => {
@@ -113,6 +114,17 @@ export const toggleActiveHorse = async (horseNumber: number, isActive: boolean) 
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to toggle active horse');
+  return data;
+};
+
+export const togglePaid = async (playerName: string, isPaid: boolean) => {
+  const res = await fetch(`${API_BASE}/paid`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerName, isPaid })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to toggle paid status');
   return data;
 };
 

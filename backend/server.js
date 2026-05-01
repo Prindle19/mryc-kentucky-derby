@@ -29,7 +29,8 @@ async function initDB() {
       grandPrizePercentage: 50,
       scratchedHorses: [],
       activeHorses: Array.from({length: 20}, (_, i) => i + 1),
-      boxes: []
+      boxes: [],
+      paidPlayers: []
     });
   }
 }
@@ -276,9 +277,34 @@ app.post('/api/reset', async (req, res) => {
     showHorse: null,
     scratchedHorses: [],
     activeHorses: Array.from({length: 20}, (_, i) => i + 1),
-    boxes: []
+    boxes: [],
+    paidPlayers: []
   });
   res.json({ success: true });
+});
+
+app.post('/api/paid', async (req, res) => {
+  const { playerName, isPaid } = req.body;
+  if (!playerName) return res.status(400).json({ error: 'Invalid player name' });
+
+  try {
+    await db.runTransaction(async (t) => {
+      const doc = await t.get(docRef);
+      const data = doc.data();
+      let paid = data.paidPlayers || [];
+
+      if (isPaid && !paid.includes(playerName)) {
+        paid.push(playerName);
+      } else if (!isPaid) {
+        paid = paid.filter(p => p !== playerName);
+      }
+
+      t.update(docRef, { paidPlayers: paid });
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 // Serve Frontend in Production

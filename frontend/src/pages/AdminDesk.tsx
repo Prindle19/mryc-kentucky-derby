@@ -1,4 +1,4 @@
-import { fetchBoard, buyBoxes, quickPick, draw, resetBoard, setResults, toggleScratch, type BoardState } from '../api/api';
+import { fetchBoard, buyBoxes, quickPick, draw, resetBoard, setResults, toggleScratch, togglePaid, type BoardState } from '../api/api';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useNavigate } from 'react-router-dom';
@@ -13,7 +13,7 @@ export default function AdminDesk() {
   const [state, setState] = useState<BoardState | null>(null);
   const [pending, setPending] = useState<{x: number, y: number}[]>([]);
   const [player, setPlayer] = useState('');
-  const [qpQty, setQpQty] = useState(1);
+  const [qpQty, setQpQty] = useState<number | ''>(1);
   
   const [winSelection, setWinSelection] = useState<number>(0);
   const [showSelection, setShowSelection] = useState<number>(0);
@@ -61,9 +61,12 @@ export default function AdminDesk() {
 
   const commitQuickPick = async () => {
     if (!player) return alert('Enter a player name');
-    if (qpQty < 1 || qpQty > 380) return alert('Invalid quantity');
+    const gridSize = state?.activeHorses ? state.activeHorses.length : 20;
+    const availBoxes = state ? (gridSize * gridSize - gridSize) - state.boxes.filter(b => b.owner && b.x < gridSize && b.y < gridSize).length : 380;
+    const qty = typeof qpQty === 'number' ? qpQty : 0;
+    if (qty < 1 || qty > availBoxes) return alert(`Invalid quantity. Must be between 1 and ${availBoxes}`);
     try {
-      await quickPick(player, qpQty);
+      await quickPick(player, qty);
       setPlayer('');
       setQpQty(1);
       loadBoard();
@@ -286,17 +289,27 @@ export default function AdminDesk() {
                     type="number" 
                     min="1" max={availableBoxes} 
                     value={qpQty}
-                    onChange={e => setQpQty(parseInt(e.target.value) || 1)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setQpQty('');
+                      } else {
+                        const num = parseInt(val, 10);
+                        if (!isNaN(num)) {
+                          setQpQty(Math.min(num, availableBoxes));
+                        }
+                      }
+                    }}
                     className="w-24 p-2 border border-slate-300 rounded-lg text-lg font-semibold text-center"
                   />
                   <div className="flex-1 flex flex-col justify-center bg-slate-50 rounded-lg px-3 text-right border border-slate-100">
                     <div className="text-xs text-slate-500">Owed</div>
-                    <div className="font-bold text-emerald-600">${qpQty * state.pricePerBox}</div>
+                    <div className="font-bold text-emerald-600">${(typeof qpQty === 'number' ? qpQty : 0) * state.pricePerBox}</div>
                   </div>
                 </div>
                 <button 
                   onClick={commitQuickPick}
-                  disabled={!player}
+                  disabled={!player || typeof qpQty !== 'number' || qpQty < 1}
                   className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold text-lg rounded-lg shadow disabled:opacity-50"
                 >
                   Buy Quick Picks
@@ -487,12 +500,20 @@ export default function AdminDesk() {
                         <p className="text-white/40 text-sm italic">No refunds to process.</p>
                       ) : (
                         <div className="flex flex-col gap-2">
-                          {refundEntries.map(([owner, amount]) => (
-                            <div key={owner} className="flex justify-between items-center bg-white/5 p-2 rounded border border-red-500/30">
-                              <span className="font-semibold text-white truncate max-w-[150px]">{owner}</span>
-                              <span className="font-bold text-red-400">-${amount}</span>
-                            </div>
-                          ))}
+                          {refundEntries.map(([owner, amount]) => {
+                            const isPaid = state.paidPlayers?.includes(owner);
+                            return (
+                              <div key={owner} className={cn("flex justify-between items-center bg-white/5 p-2 rounded border", isPaid ? "border-emerald-500/50 opacity-50" : "border-red-500/30")}>
+                                <span className={cn("font-semibold text-white truncate max-w-[120px]", isPaid && "line-through text-white/50")} title={owner}>{owner}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-red-400">-${amount}</span>
+                                  <button onClick={() => togglePaid(owner, !isPaid).then(loadBoard).catch(e => alert(e.message))} className={cn("text-[10px] px-2 py-1 rounded font-bold transition-colors", isPaid ? "bg-emerald-600 text-white" : "bg-white/10 hover:bg-white/20 text-slate-300")}>
+                                    {isPaid ? 'PAID' : 'MARK PAID'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -520,12 +541,20 @@ export default function AdminDesk() {
                           )}
                           {payoutEntries.length === 0 ? (
                             <p className="text-white/40 text-sm italic mt-2">No winning boxes sold.</p>
-                          ) : payoutEntries.map(([owner, amount]) => (
-                            <div key={owner} className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/30 shadow-sm">
-                              <span className="font-bold text-emerald-100 truncate max-w-[150px]">{owner}</span>
-                              <span className="font-black text-emerald-400 text-lg">${amount}</span>
-                            </div>
-                          ))}
+                          ) : payoutEntries.map(([owner, amount]) => {
+                            const isPaid = state.paidPlayers?.includes(owner);
+                            return (
+                              <div key={owner} className={cn("flex justify-between items-center bg-emerald-500/10 p-3 rounded-lg border shadow-sm", isPaid ? "border-emerald-500/50 opacity-50" : "border-emerald-500/30")}>
+                                <span className={cn("font-bold text-emerald-100 truncate max-w-[120px]", isPaid && "line-through text-emerald-100/50")} title={owner}>{owner}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-emerald-400 text-lg">${amount}</span>
+                                  <button onClick={() => togglePaid(owner, !isPaid).then(loadBoard).catch(e => alert(e.message))} className={cn("text-[10px] px-2 py-1 rounded font-bold transition-colors", isPaid ? "bg-emerald-600 text-white" : "bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-200")}>
+                                    {isPaid ? 'PAID' : 'MARK PAID'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
